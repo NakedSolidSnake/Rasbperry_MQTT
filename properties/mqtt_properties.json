@@ -6,6 +6,7 @@
     },
     "mqtt":
     {
-        
+        "id": "555333",
+        "address": "localhost"
     }
 }
