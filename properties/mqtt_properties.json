@@ -1,12 +1,12 @@
 {
-    "network":
-    {
-        "ssid": "ssid",
-        "password": "password"
-    },
-    "mqtt":
-    {
+    "led":{
         "id": "555333",
         "address": "localhost"
-    }
+    },
+
+    "button":{
+        "id": "555332",
+        "address": "localhost"
+    },        
+    "topics": "/led/state"
 }

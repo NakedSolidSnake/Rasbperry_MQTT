@@ -3,11 +3,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <button.h>
+#include <json.h>
+#include "mqtt_connection.h"
 #include "MQTTClient.h"
-
-#define ADDRESS     "localhost"
-#define CLIENTID    "555333"
-#define STATE_TOPIC    "/led/state"
 
 #define _1ms    1000
 
@@ -24,10 +22,31 @@ static void wait_press(void);
 static void publishState(MQTTClient client);
 static void publish(MQTTClient client, char* topic, char* payload);
 
+MQTT_Connection mqtt = {0};
+
+IHandler iButton[] =
+    {
+        {.token = "id", .data = &mqtt.id, .type = eType_String, .child = NULL},
+        {.token = "address", .data = &mqtt.address, .type = eType_String, .child = NULL},
+};
+
+IHandler iMQTT[] =
+    {
+        {.token = "button", .data = NULL, .type = eType_Object, .child = iButton, .size = getItems(iButton)},
+        {.token = "topics", .data = &mqtt.topic, .type = eType_String, .child = NULL},
+};
+
 int main(int argc, char *argv[])
 {
+    char buffer[512] = {0};
+    
+    if(!getJsonFromFile("mqtt_properties.json", buffer, 512))
+        return EXIT_FAILURE;
+
+    processJson(buffer, iMQTT, getItems(iMQTT));
+
     MQTTClient client;
-    MQTTClient_create(&client, ADDRESS, CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
+    MQTTClient_create(&client, mqtt.address, mqtt.id, MQTTCLIENT_PERSISTENCE_NONE, NULL);
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
 
     int rc;
@@ -74,7 +93,7 @@ static void publishState(MQTTClient client)
     memset(buffer, 0, 10);
     state = state ? eStateLow : eStateHigh;
     snprintf(buffer, 10, "%d", state);
-    publish(client, STATE_TOPIC, buffer);
+    publish(client, mqtt.topic, buffer);
 }
 
 static void publish(MQTTClient client, char* topic, char* payload) {
