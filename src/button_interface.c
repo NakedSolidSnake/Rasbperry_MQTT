@@ -1,28 +1,20 @@
+#include <unistd.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <button.h>
-#include <json.h>
-#include "mqtt_connection.h"
+#include <sys/types.h>
+#include <time.h>
+#include <button_interface.h>
+#include <mqtt_connection.h>
 #include "MQTTClient.h"
+#include <json/json.h>
 
 #define _1ms    1000
 
-static Button_t button =
-{
-    .gpio.pin = 7,
-    .gpio.eMode = eModeInput,
-    .ePullMode = ePullModePullUp,
-    .eIntEdge = eIntEdgeFalling,
-    .cb = NULL
-};
-
-static void wait_press(void);
 static void publishState(MQTTClient client);
 static void publish(MQTTClient client, char* topic, char* payload);
 
-MQTT_Connection mqtt = {0};
+static MQTT_Connection mqtt = {0};
 
 IHandler iButton[] =
     {
@@ -30,20 +22,20 @@ IHandler iButton[] =
         {.token = "address", .data = &mqtt.address, .type = eType_String, .child = NULL},
 };
 
-IHandler iMQTT[] =
+static IHandler iMQTT[] =
     {
         {.token = "button", .data = NULL, .type = eType_Object, .child = iButton, .size = getItems(iButton)},
         {.token = "topics", .data = &mqtt.topic, .type = eType_String, .child = NULL},
 };
 
-int main(int argc, char *argv[])
+bool Button_Run(void *object, char **argv, Button_Interface *button)
 {
     char buffer[512] = {0};
     
-    if(!getJsonFromFile("mqtt_properties.json", buffer, 512))
+    if(!JSON_GetFromFile("mqtt_properties.json", buffer, 512))
         return EXIT_FAILURE;
 
-    processJson(buffer, iMQTT, getItems(iMQTT));
+    JSON_Process(buffer, iMQTT, getItems(iMQTT));
 
     MQTTClient client;
     MQTTClient_create(&client, mqtt.address, mqtt.id, MQTTCLIENT_PERSISTENCE_NONE, NULL);
@@ -54,44 +46,37 @@ int main(int argc, char *argv[])
         printf("Failed to connect, return code %d\n", rc);
         exit(-1);
     }
-    
-    if (Button_init(&button))
+
+    if(button->Init(object) == false)
         return EXIT_FAILURE;
 
-    while(1)
+    while (true)
     {
-        wait_press();
+        while (true)
+        {
+            if (!button->Read(object))
+            {
+                usleep(_1ms * 100);
+                break;
+            }
+            else
+            {
+                usleep(_1ms);
+            }
+        }
+
         publishState(client);
     }
-
-    return 0;
+    
+    return true;
 }
 
-
-static void wait_press(void)
-{
-    while (1)
-    {
-        if (!Button_read(&button))
-        {
-            usleep(_1ms * 40);
-            while (!Button_read(&button))
-                ;                
-            usleep(_1ms * 40);
-            break;
-        }
-        else
-        {
-            usleep(_1ms);
-        }
-    }
-}
 static void publishState(MQTTClient client)
 {
-    static eState_t state = eStateLow;
+    static bool state = false;
     char buffer[10] = {0};
     memset(buffer, 0, 10);
-    state = state ? eStateLow : eStateHigh;
+    state = state ? false : true;
     snprintf(buffer, 10, "%d", state);
     publish(client, mqtt.topic, buffer);
 }
